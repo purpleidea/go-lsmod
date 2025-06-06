@@ -1,6 +1,9 @@
 package lsmod
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type modTainted uint32
 
@@ -27,90 +30,71 @@ const (
 	TaintedT    modTainted = 131072 // (T): The kernel was built with the struct randomization plugin.
 )
 
-func parseTainted(t string) (modTainted, error) { // nolint: gocyclo
-	switch t {
-	case "(P)":
-		return TaintedP, nil
-	case "(F)":
-		return TaintedF, nil
-	case "(S)":
-		return TaintedS, nil
-	case "(R)":
-		return TaintedR, nil
-	case "(M)":
-		return TaintedM, nil
-	case "(B)":
-		return TaintedB, nil
-	case "(U)":
-		return TaintedU, nil
-	case "(D)":
-		return TaintedD, nil
-	case "(A)":
-		return TaintedA, nil
-	case "(W)":
-		return TaintedW, nil
-	case "(C)":
-		return TaintedC, nil
-	case "(I)":
-		return TaintedI, nil
-	case "(O)":
-		return TaintedO, nil
-	case "(E)":
-		return TaintedE, nil
-	case "(L)":
-		return TaintedL, nil
-	case "(K)":
-		return TaintedK, nil
-	case "(X)":
-		return TaintedX, nil
-	case "(T)":
-		return TaintedT, nil
-	}
-
-	return 0, fmt.Errorf("unknown tainted flag %q", t)
+var taintFlagMap = map[string]modTainted{
+	"(P)": TaintedP,
+	"(F)": TaintedF,
+	"(S)": TaintedS,
+	"(R)": TaintedR,
+	"(M)": TaintedM,
+	"(B)": TaintedB,
+	"(U)": TaintedU,
+	"(D)": TaintedD,
+	"(A)": TaintedA,
+	"(W)": TaintedW,
+	"(C)": TaintedC,
+	"(I)": TaintedI,
+	"(O)": TaintedO,
+	"(E)": TaintedE,
+	"(L)": TaintedL,
+	"(K)": TaintedK,
+	"(X)": TaintedX,
+	"(T)": TaintedT,
 }
 
-func (t modTainted) String() string { // nolint: gocyclo
-	switch t {
-	case TaintedNone:
+var taintStringMap = map[modTainted]string{}
+
+func init() {
+	for str, val := range taintFlagMap {
+		taintStringMap[val] = str
+	}
+}
+
+func (t modTainted) String() string {
+	if t == TaintedNone {
 		return "()"
-	case TaintedP:
-		return "(P)"
-	case TaintedF:
-		return "(F)"
-	case TaintedS:
-		return "(S)"
-	case TaintedR:
-		return "(R)"
-	case TaintedM:
-		return "(M)"
-	case TaintedB:
-		return "(B)"
-	case TaintedU:
-		return "(U)"
-	case TaintedD:
-		return "(D)"
-	case TaintedA:
-		return "(A)"
-	case TaintedW:
-		return "(W)"
-	case TaintedC:
-		return "(C)"
-	case TaintedI:
-		return "(I)"
-	case TaintedO:
-		return "(O)"
-	case TaintedE:
-		return "(E)"
-	case TaintedL:
-		return "(L)"
-	case TaintedK:
-		return "(K)"
-	case TaintedX:
-		return "(X)"
-	case TaintedT:
-		return "(T)"
 	}
 
-	panic(fmt.Errorf("unknown tainted flag %d", t))
+	var chars []string
+	for val, str := range taintStringMap {
+		if t&val != 0 {
+			// Extract just the letter from "(X)"
+			chars = append(chars, string(str[1]))
+		}
+	}
+	return fmt.Sprintf("(%s)", strings.Join(chars, ""))
+}
+
+func parseTainted(s string) (modTainted, error) {
+	if len(s) < 2 || s[0] != '(' || s[len(s)-1] != ')' {
+		return 0, fmt.Errorf("invalid format: %q", s)
+	}
+
+	var combined modTainted
+	body := s[1 : len(s)-1] // extract inner characters, e.g. "OE"
+
+	for _, c := range body {
+		found := false
+		for str, val := range taintFlagMap {
+			if len(str) == 3 && rune(str[1]) == c { // str[1] is the flag letter inside (X)
+				combined |= val
+				found = true
+				break
+			}
+		}
+		if !found {
+			return 0, fmt.Errorf("unknown tainted flag (%c)", c)
+		}
+	}
+
+	return combined, nil
 }
